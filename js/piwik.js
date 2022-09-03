@@ -3096,6 +3096,12 @@ if (typeof window.Matomo !== 'object') {
              * Send request
              */
             function sendRequest(request, delay, callback) {
+
+                // Do not send tracking request when serving via 'file:// protocol
+                if (window.location.protocol.indexOf('file:') === 0) {
+                    return
+                }
+
                 if (!clientHintsResolved) {
                   clientHintsRequestQueue.push(request);
                   return;
