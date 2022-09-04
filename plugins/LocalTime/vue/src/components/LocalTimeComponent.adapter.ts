@@ -12,6 +12,9 @@ export default createAngularJsAdapter({
   component: MatomoLocalTimeComponent,
   directiveName: 'matomoLocalTimeComponent',
   scope: {
+    serverTimeInMillis: {
+      angularJsBind: '<',
+    },
     isTimeFormatTwelve: {
       angularJsBind: '<',
     },

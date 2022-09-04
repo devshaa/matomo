@@ -1,4 +1,5 @@
 <div 
     matomo-local-time-component
+    server-time-in-millis="{{ serverTimeInMillis|json_encode|e('html_attr') }}"
     is-time-format-twelve="{{ isTimeFormatTwelve|json_encode|e('html_attr') }}"
 ></div>

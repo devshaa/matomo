@@ -8,6 +8,7 @@
  */
 namespace Piwik\Plugins\LocalTime\Widgets;
 
+use Piwik\Date;
 use Piwik\View;
 use Piwik\Widget\Widget;
 use Piwik\Widget\WidgetConfig;
@@ -75,6 +76,7 @@ class GetCurrentLocalTime extends Widget
         // or: return $this->renderTemplate('myViewTemplate', array(...view variables...));
         $view = new View('@LocalTime/index');
         $view->isTimeFormatTwelve = (int) LanguagesManager::uses12HourClockForCurrentUser();
+        $view->serverTimeInMillis = round((microtime(true) * 1000));
         return $view->render();
     }
 
