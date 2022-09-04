@@ -170,11 +170,14 @@ class PasswordResetter
         $login = $user['login'];
 
         $keySuffix = time() . Common::getRandomString($length = 32);
-        $this->savePasswordResetInfo($login, $newPassword, $keySuffix);
+        
+        // Generate password reset token
+        $resetToken = $this->generatePasswordResetToken($user, $keySuffix);
+        $this->savePasswordResetInfo($login, $newPassword, $keySuffix, $resetToken);
 
         // ... send email with confirmation link
         try {
-            $this->sendEmailConfirmationLink($user, $keySuffix);
+            $this->sendEmailConfirmationLink($user, $keySuffix, $resetToken);
         } catch (Exception $ex) {
             // remove password reset info
             $this->removePasswordResetInfo($login);
@@ -196,7 +199,8 @@ class PasswordResetter
         if ($resetInfo === false
             || empty($resetInfo['hash'])
             || empty($resetInfo['keySuffix'])
-            || !$this->isTokenValid($resetToken, $user, $resetInfo['keySuffix'])
+            || empty($resetInfo['resetToken'])
+            || !$this->isTokenValid($resetToken, $resetInfo['resetToken'])
         ) {
             throw new Exception(Piwik::translate('Login_InvalidOrExpiredToken'));
         }
@@ -240,24 +244,13 @@ class PasswordResetter
      * it exists and has not expired.
      *
      * @param string $token The reset token to check.
-     * @param array $user The user information returned by the UsersManager API.
-     * @param string $keySuffix The suffix used in generating a token.
+     * @param string $resetToken The user information returned by the UsersManager API.
      * @return bool true if valid, false otherwise.
      */
-    public function isTokenValid($token, $user, $keySuffix)
+    public function isTokenValid($token, $resetToken)
     {
-        $now = time();
-
-        // token valid for 24 hrs (give or take, due to the coarse granularity in our strftime format string)
-        for ($i = 0; $i <= 24; $i++) {
-            $generatedToken = $this->generatePasswordResetToken($user, $keySuffix, $now + $i * 60 * 60);
-            if ($generatedToken === $token) {
-                return true;
-            }
-        }
-
-        // fails if token is invalid, expired, password already changed, other user information has changed, ...
-        return false;
+        // verify the token against the resetToken
+        return $this->passwordHelper->verify($token, $resetToken);
     }
 
     /**
@@ -346,7 +339,8 @@ class PasswordResetter
      */
     protected function hashData($data)
     {
-        return Common::hash($data);
+        // Return secure hash that uses Password's Preferred Algorithm
+        return $this->passwordHelper->hash($data);
     }
 
     /**
@@ -427,15 +421,12 @@ class PasswordResetter
      * Sends email confirmation link for a password reset request.
      *
      * @param array $user User info for the requested password reset.
-     * @param string $keySuffix The suffix used in generating a token.
+     * @param string $resetToken The token to request password reset.
      */
-    private function sendEmailConfirmationLink($user, $keySuffix)
+    private function sendEmailConfirmationLink($user, $resetToken)
     {
         $login = $user['login'];
         $email = $user['email'];
-
-        // construct a password reset token from user information
-        $resetToken = $this->generatePasswordResetToken($user, $keySuffix);
 
         $confirmPasswordModule = $this->confirmPasswordModule;
         $confirmPasswordAction = $this->confirmPasswordAction;
@@ -464,10 +455,11 @@ class PasswordResetter
      * @param string $login The user login for whom a password change was requested.
      * @param string $newPassword The new password to set.
      * @param string $keySuffix The suffix used in generating a token.
+     * @param string $resetToken The token to be used in resetting the password.
      *
      * @throws Exception if a password reset was already requested within one hour
      */
-    private function savePasswordResetInfo($login, $newPassword, $keySuffix)
+    private function savePasswordResetInfo($login, $newPassword, $keySuffix, $resetToken)
     {
         $optionName = self::getPasswordResetInfoOptionName($login);
 
@@ -489,11 +481,14 @@ class PasswordResetter
             }
         }
 
+        // Crypto hash the reset token before saving
+        $resetToken = $this->passwordHelper->hash($resetToken);
 
         $optionData = [
             'hash' => $this->passwordHelper->hash(UsersManager::getPasswordHash($newPassword)),
             'keySuffix' => $keySuffix,
             'timestamp' => $time,
+            'resetToken' => $resetToken,
             'requests' => $count+1
         ];
         $optionData = json_encode($optionData);
